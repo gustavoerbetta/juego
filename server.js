@@ -328,8 +328,7 @@ function processReinforceMove(G, sala, from, to) {
     if (getArmies(G, from) < 2) return;
     G.countries[from].armies -= 1;
     G.countries[to].armies += 1;
-    G.reinforceFrom = from;
-    G.reinforceTo = to;
+    G.reinforceFrom = from; G.reinforceTo = to;
     broadcastSala(sala);
 }
 
@@ -492,8 +491,7 @@ function aiPlace(G, sala, idx) {
     const info = G.placeInfo; if (!info) return;
     const own = playerCountries(G, idx);
     if (own.length === 0) {
-        G.phase = 'play';
-        broadcastSala(sala);
+        G.phase = 'play'; broadcastSala(sala);
         scheduleAI(sala, idx);
         return;
     }
@@ -587,9 +585,9 @@ function aiTurn(sala, idx) {
     const G = sala.G;
     if (G.gameOver || !isAI(G, idx) || G.currentPlayerIdx !== idx) return;
 
-    // ✅ FIX: Si estamos en fase de colocación, colocar primero (antes esto se saltaba y la IA nunca ponía tropas)
+    // Si estamos en fase de colocación, colocar primero
     if (G.phase === 'place') {
-        aiPlace(G, sala, idx);   // aiPlace llamará a scheduleAI al final para continuar con los ataques
+        aiPlace(G, sala, idx);
         return;
     }
 
@@ -632,13 +630,34 @@ class Sala {
             estado: this.estado,
             hostClientId: this.hostClientId,
             hostSocketId: this.jugadores.find(j => j.clientId === this.hostClientId)?.id || null,
+            colores: COLORS,
+            coloresNombres: COLOR_NAMES,
             jugadores: this.jugadores.map(j => ({
-                id: j.id, nombre: j.nombre, color: j.color, tipo: j.tipo, esBot: j.tipo === 'ai'
+                id: j.id,
+                clientId: j.clientId,
+                nombre: j.nombre,
+                color: j.color,
+                colorIdx: j.colorIdx,
+                colorName: j.colorName,
+                tipo: j.tipo,
+                esBot: j.tipo === 'ai'
             }))
         };
     }
 
-    addPlayer(socketId, nombre, clientId) {
+    // Devuelve el primer índice de color libre (no usado por ningún jugador de la sala)
+    proximoColorLibre(preferido) {
+        const usados = new Set(this.jugadores.map(j => j.colorIdx));
+        if (typeof preferido === 'number' && preferido >= 0 && preferido < COLORS.length && !usados.has(preferido)) {
+            return preferido;
+        }
+        for (let i = 0; i < COLORS.length; i++) {
+            if (!usados.has(i)) return i;
+        }
+        return -1;
+    }
+
+    addPlayer(socketId, nombre, clientId, colorPreferido) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
         const existente = this.jugadores.find(j => j.clientId === clientId);
         if (existente) {
@@ -647,13 +666,21 @@ class Sala {
             return { ok: true };
         }
         if (this.jugadores.length >= 6) return { ok: false, error: 'Sala llena (máx 6).' };
+
+        const colorIdx = this.proximoColorLibre(colorPreferido);
+        if (colorIdx < 0) return { ok: false, error: 'No hay colores libres.' };
+
         const i = this.jugadores.length;
         this.jugadores.push({
-            id: socketId, clientId,
+            id: socketId,
+            clientId,
             nombre: nombre || `Jugador ${i + 1}`,
-            color: COLORS[i % COLORS.length],
-            colorName: COLOR_NAMES[i % COLOR_NAMES.length],
-            tipo: 'human', eliminado: false, idx: i
+            color: COLORS[colorIdx],
+            colorName: COLOR_NAMES[colorIdx],
+            colorIdx,
+            tipo: 'human',
+            eliminado: false,
+            idx: i
         });
         if (!this.hostClientId) this.hostClientId = clientId;
         return { ok: true };
@@ -662,15 +689,36 @@ class Sala {
     addBot() {
         if (this.estado !== 'esperando') return { ok: false };
         if (this.jugadores.length >= 6) return { ok: false };
+        const colorIdx = this.proximoColorLibre();
+        if (colorIdx < 0) return { ok: false, error: 'No hay colores libres.' };
         const i = this.jugadores.length;
         this.jugadores.push({
             id: `bot_${Math.random().toString(36).slice(2, 11)}`,
             clientId: `bot_${Math.random().toString(36).slice(2, 11)}`,
             nombre: `IA ${i + 1}`,
-            color: COLORS[i % COLORS.length],
-            colorName: COLOR_NAMES[i % COLOR_NAMES.length],
-            tipo: 'ai', eliminado: false, idx: i
+            color: COLORS[colorIdx],
+            colorName: COLOR_NAMES[colorIdx],
+            colorIdx,
+            tipo: 'ai',
+            eliminado: false,
+            idx: i
         });
+        return { ok: true };
+    }
+
+    // Cambia el color de un jugador. Sólo se permite si está libre.
+    setPlayerColor(clientId, colorIdx) {
+        if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
+        const j = this.jugadores.find(x => x.clientId === clientId);
+        if (!j) return { ok: false, error: 'Jugador no encontrado.' };
+        if (typeof colorIdx !== 'number' || colorIdx < 0 || colorIdx >= COLORS.length) {
+            return { ok: false, error: 'Color inválido.' };
+        }
+        const tomado = this.jugadores.some(x => x.clientId !== clientId && x.colorIdx === colorIdx);
+        if (tomado) return { ok: false, error: 'Color ya ocupado por otro jugador.' };
+        j.colorIdx = colorIdx;
+        j.color = COLORS[colorIdx];
+        j.colorName = COLOR_NAMES[colorIdx];
         return { ok: true };
     }
 
@@ -711,13 +759,13 @@ function broadcastSala(sala) {
 io.on('connection', (socket) => {
     console.log('Conectado:', socket.id);
 
-    socket.on('crear_o_unirse', ({ salaId, nombreJugador, clientId }) => {
+    socket.on('crear_o_unirse', ({ salaId, nombreJugador, clientId, colorPreferido }) => {
         salaId = (salaId || '').toUpperCase();
         if (!salaId) { socket.emit('error_juego', 'Sala inválida.'); return; }
         if (!clientId) clientId = 'c_' + socket.id;
         if (!SALAS[salaId]) SALAS[salaId] = new Sala(salaId);
         const sala = SALAS[salaId];
-        const res = sala.addPlayer(socket.id, nombreJugador, clientId);
+        const res = sala.addPlayer(socket.id, nombreJugador, clientId, colorPreferido);
         if (!res.ok) { socket.emit('error_juego', res.error); return; }
         socket.join(salaId);
         socket.data.salaId = salaId;
@@ -733,7 +781,21 @@ io.on('connection', (socket) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
         if (sala.hostClientId !== socket.data.clientId) return;
-        sala.addBot();
+        const res = sala.addBot();
+        if (!res.ok) { socket.emit('error_juego', res.error || 'No se pudo añadir IA.'); return; }
+        io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
+    });
+
+    // Cambiar color propio en la sala de espera
+    socket.on('cambiar_color', ({ salaId, colorIdx }) => {
+        const sala = SALAS[(salaId || '').toUpperCase()];
+        if (!sala) return;
+        const res = sala.setPlayerColor(socket.data.clientId, colorIdx);
+        if (!res.ok) {
+            // Devolvemos error al cliente para que muestre un mensaje breve
+            socket.emit('error_color', res.error || 'Color no disponible.');
+            return;
+        }
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
 
