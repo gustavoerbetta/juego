@@ -120,8 +120,9 @@ ADJACENCIES.forEach(([a, b]) => {
     if (!adjMap[b].includes(a)) adjMap[b].push(a);
 });
 
-const COLORS = ['#00bcd4', '#c0392b', '#e91e63', '#f1c40f', '#27ae60', '#222222'];
-const COLOR_NAMES = ['Cian', 'Rojo', 'Magenta', 'Amarillo', 'Verde', 'Negro'];
+// ============ COLORES (orden de ciclo: azul → verde → naranja → magenta → negro → blanco → violeta → rojo → cian) ============
+const COLORS = ['#2980b9', '#27ae60', '#e67e22', '#e91e63', '#222222', '#ffffff', '#9c27b0', '#c0392b', '#00bcd4'];
+const COLOR_NAMES = ['Azul', 'Verde', 'Naranja', 'Magenta', 'Negro', 'Blanco', 'Violeta', 'Rojo', 'Cian'];
 
 // =====================================================================
 //  UTILIDADES
@@ -585,7 +586,6 @@ function aiTurn(sala, idx) {
     const G = sala.G;
     if (G.gameOver || !isAI(G, idx) || G.currentPlayerIdx !== idx) return;
 
-    // Si estamos en fase de colocación, colocar primero
     if (G.phase === 'place') {
         aiPlace(G, sala, idx);
         return;
@@ -645,7 +645,6 @@ class Sala {
         };
     }
 
-    // Devuelve el primer índice de color libre (no usado por ningún jugador de la sala)
     proximoColorLibre(preferido) {
         const usados = new Set(this.jugadores.map(j => j.colorIdx));
         if (typeof preferido === 'number' && preferido >= 0 && preferido < COLORS.length && !usados.has(preferido)) {
@@ -706,7 +705,6 @@ class Sala {
         return { ok: true };
     }
 
-    // Cambia el color de un jugador. Sólo se permite si está libre.
     setPlayerColor(clientId, colorIdx) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
         const j = this.jugadores.find(x => x.clientId === clientId);
@@ -786,13 +784,11 @@ io.on('connection', (socket) => {
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
 
-    // Cambiar color propio en la sala de espera
     socket.on('cambiar_color', ({ salaId, colorIdx }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
         const res = sala.setPlayerColor(socket.data.clientId, colorIdx);
         if (!res.ok) {
-            // Devolvemos error al cliente para que muestre un mensaje breve
             socket.emit('error_color', res.error || 'Color no disponible.');
             return;
         }
