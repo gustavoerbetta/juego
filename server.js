@@ -120,9 +120,9 @@ ADJACENCIES.forEach(([a, b]) => {
     if (!adjMap[b].includes(a)) adjMap[b].push(a);
 });
 
-// ============ COLORES (orden: azul → verde → naranja → magenta → negro → blanco → violeta → rojo → cian) ============
-const COLORS = ['#2980b9', '#27ae60', '#e67e22', '#e91e63', '#222222', '#ffffff', '#9c27b0', '#c0392b', '#00bcd4'];
-const COLOR_NAMES = ['Azul', 'Verde', 'Naranja', 'Magenta', 'Negro', 'Blanco', 'Violeta', 'Rojo', 'Cian'];
+// ============ COLORES (azul → verde → naranja → magenta → negro → blanco → violeta → rojo → cian → amarillo) ============
+const COLORS = ['#2980b9', '#27ae60', '#e67e22', '#e91e63', '#222222', '#ffffff', '#9c27b0', '#c0392b', '#00bcd4', '#f1c40f'];
+const COLOR_NAMES = ['Azul', 'Verde', 'Naranja', 'Magenta', 'Negro', 'Blanco', 'Violeta', 'Rojo', 'Cian', 'Amarillo'];
 
 // =====================================================================
 //  UTILIDADES
@@ -706,7 +706,7 @@ class Sala {
     }
 
     // ======= CAMBIO DE COLOR (con permisos) =======
-    // reglas:
+    // Reglas:
     //  - Cualquier jugador puede cambiar SU PROPIO color.
     //  - El anfitrión puede cambiar el color de CUALQUIER IA.
     //  - Nadie puede cambiar el color de otro humano (ni el anfitrión).
@@ -801,7 +801,6 @@ io.on('connection', (socket) => {
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
 
-    // Cambiar color. Si targetClientId no viene, es el propio.
     socket.on('cambiar_color', ({ salaId, colorIdx, targetClientId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
