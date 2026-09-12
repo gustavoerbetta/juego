@@ -157,12 +157,6 @@ function continentProgress(G, idx, contId) {
 }
 function isHuman(G, idx) { return G.players[idx] && !G.players[idx].eliminated && G.players[idx].type === 'human'; }
 function isAI(G, idx) { return G.players[idx] && !G.players[idx].eliminated && G.players[idx].type === 'ai'; }
-function currentPlayer(G) { return G.players[G.currentPlayerIdx]; }
-function formatBonusString(bonusObj) {
-    const parts = [];
-    for (const [contId, count] of Object.entries(bonusObj)) if (count > 0) parts.push(`${CONTINENTS[contId].name}: ${count}`);
-    return parts.length ? parts.join(', ') : 'ninguno';
-}
 
 // =====================================================================
 //  ESTADO DE PARTIDA (G) POR SALA
@@ -463,7 +457,6 @@ function resolveCombat(G, sala, fromId, toId, aLoss, dLoss) {
                 checkElimination(G, sala);
                 return;
             } else {
-                // IA transfiere
                 let availableToMove = G.countries[fromId].armies - 1;
                 let moveCount = 0;
                 const toEnemies = getEnemyAdjacent(G, toId, idx);
@@ -512,7 +505,6 @@ function cancelCombat(G, sala) {
 
 function transferir(G, sala) {
     if (!G.pendingTransfer) return;
-    const idx = G.currentPlayerIdx;
     const { from, to } = G.pendingTransfer;
     if (getArmies(G, from) < 2) { G.pendingTransfer = null; broadcastSala(sala); return; }
     if (getArmies(G, to) >= 3) { G.pendingTransfer = null; broadcastSala(sala); return; }
@@ -537,7 +529,7 @@ function checkElimination(G, sala) {
 }
 
 // =====================================================================
-//  IA (portada del cliente)
+//  IA
 // =====================================================================
 function getActiveHumanIndices(G) {
     const list = [];
@@ -760,9 +752,9 @@ function aiTurn(sala, idx) {
 class Sala {
     constructor(id) {
         this.id = id;
-        this.jugadores = []; // { id(socketId|bot), nombre, color, colorName, tipo, eliminado, idx }
+        this.jugadores = []; // { id(socketId actual), clientId, nombre, color, colorName, tipo, eliminado, idx }
         this.estado = 'esperando';
-        this.hostId = null;
+        this.hostClientId = null; // identificador PERSISTENTE del anfitrión
         this.G = null;
         this.aiTimeout = null;
     }
@@ -771,20 +763,30 @@ class Sala {
         return {
             id: this.id,
             estado: this.estado,
-            hostId: this.hostId,
+            hostClientId: this.hostClientId,
             jugadores: this.jugadores.map(j => ({
                 id: j.id, nombre: j.nombre, color: j.color, tipo: j.tipo, esBot: j.tipo === 'ai'
             }))
         };
     }
 
-    addPlayer(socketId, nombre) {
+    addPlayer(socketId, nombre, clientId) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
+
+        // ¿Es una reconexión de un cliente que ya estaba?
+        const existente = this.jugadores.find(j => j.clientId === clientId);
+        if (existente) {
+            existente.id = socketId; // actualizamos su socketId al nuevo
+            if (existente._desconectado) delete existente._desconectado;
+            return { ok: true };
+        }
+
         if (this.jugadores.length >= 6) return { ok: false, error: 'Sala llena (máx 6).' };
-        if (this.jugadores.find(j => j.id === socketId)) return { ok: true };
+
         const i = this.jugadores.length;
         this.jugadores.push({
             id: socketId,
+            clientId,
             nombre: nombre || `Jugador ${i + 1}`,
             color: COLORS[i % COLORS.length],
             colorName: COLOR_NAMES[i % COLOR_NAMES.length],
@@ -792,7 +794,7 @@ class Sala {
             eliminado: false,
             idx: i
         });
-        if (!this.hostId) this.hostId = socketId;
+        if (!this.hostClientId) this.hostClientId = clientId;
         return { ok: true };
     }
 
@@ -802,6 +804,7 @@ class Sala {
         const i = this.jugadores.length;
         this.jugadores.push({
             id: `bot_${Math.random().toString(36).slice(2, 11)}`,
+            clientId: `bot_${Math.random().toString(36).slice(2, 11)}`,
             nombre: `🤖 IA ${i + 1}`,
             color: COLORS[i % COLORS.length],
             colorName: COLOR_NAMES[i % COLOR_NAMES.length],
@@ -831,8 +834,8 @@ class Sala {
         return { ok: true };
     }
 
-    getPlayerIdxBySocket(socketId) {
-        const j = this.jugadores.find(x => x.id === socketId);
+    getPlayerIdxByClient(clientId) {
+        const j = this.jugadores.find(x => x.clientId === clientId);
         return j ? j.idx : -1;
     }
 }
@@ -853,24 +856,25 @@ function broadcastSala(sala) {
 io.on('connection', (socket) => {
     console.log('Conectado:', socket.id);
 
-    socket.on('crear_o_unirse', ({ salaId, nombreJugador }) => {
+    socket.on('crear_o_unirse', ({ salaId, nombreJugador, clientId }) => {
         salaId = (salaId || '').toUpperCase();
         if (!salaId) { socket.emit('error_juego', 'Sala inválida.'); return; }
+        if (!clientId) clientId = 'c_' + socket.id; // fallback
 
         if (!SALAS[salaId]) SALAS[salaId] = new Sala(salaId);
         const sala = SALAS[salaId];
 
-        const res = sala.addPlayer(socket.id, nombreJugador);
+        const res = sala.addPlayer(socket.id, nombreJugador, clientId);
         if (!res.ok) { socket.emit('error_juego', res.error); return; }
 
         socket.join(salaId);
         socket.data.salaId = salaId;
+        socket.data.clientId = clientId;
 
         io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
 
-        // Si la partida ya empezó, enviamos el estado actual
         if (sala.estado === 'jugando' && sala.G) {
-            const idx = sala.getPlayerIdxBySocket(socket.id);
+            const idx = sala.getPlayerIdxByClient(clientId);
             socket.emit('partida_iniciada', { estado: sala.G, miIndice: idx });
         }
     });
@@ -878,7 +882,7 @@ io.on('connection', (socket) => {
     socket.on('agregar_bot', ({ salaId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
-        if (sala.hostId !== socket.id) return;
+        if (sala.hostClientId !== socket.data.clientId) return; // solo el anfitrión
         sala.addBot();
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
@@ -886,7 +890,10 @@ io.on('connection', (socket) => {
     socket.on('iniciar_partida', ({ salaId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
-        if (sala.hostId !== socket.id) return;
+        if (sala.hostClientId !== socket.data.clientId) {
+            socket.emit('error_juego', 'Solo el anfitrión puede iniciar la partida.');
+            return;
+        }
         const res = sala.startGame();
         if (!res.ok) socket.emit('error_juego', res.error || 'No se pudo iniciar.');
     });
@@ -895,7 +902,7 @@ io.on('connection', (socket) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala || !sala.G || sala.estado !== 'jugando') return;
         const G = sala.G;
-        const idx = sala.getPlayerIdxBySocket(socket.id);
+        const idx = sala.getPlayerIdxByClient(socket.data.clientId);
         if (idx < 0 || idx !== G.currentPlayerIdx) return;
         if (G.gameOver) return;
         if (G.players[idx].type !== 'human') return;
@@ -934,21 +941,34 @@ io.on('connection', (socket) => {
         const sala = SALAS[salaId];
         if (!sala) return;
 
-        const idx = sala.getPlayerIdxBySocket(socket.id);
+        const clientId = socket.data.clientId;
+        const idx = sala.getPlayerIdxByClient(clientId);
         if (idx < 0) return;
 
-        // Si estamos en espera, lo quitamos. Si estamos jugando, lo eliminamos.
         if (sala.estado === 'esperando') {
-            sala.jugadores = sala.jugadores.filter(j => j.id !== socket.id);
-            sala.jugadores.forEach((j, i) => { j.idx = i; });
-            if (sala.hostId === socket.id) sala.hostId = sala.jugadores[0] ? sala.jugadores[0].id : null;
-            if (sala.jugadores.length === 0) { delete SALAS[salaId]; return; }
+            // En lobby: esperamos 20s por si reconecta
+            sala.jugadores[idx]._desconectado = Date.now();
             io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
+
+            setTimeout(() => {
+                const s = SALAS[salaId];
+                if (!s) return;
+                const j = s.jugadores.find(x => x.clientId === clientId);
+                if (!j || !j._desconectado) return;
+                // Eliminar
+                s.jugadores = s.jugadores.filter(x => x.clientId !== clientId);
+                s.jugadores.forEach((p, i) => { p.idx = i; });
+                if (s.hostClientId === clientId) {
+                    s.hostClientId = s.jugadores[0] ? s.jugadores[0].clientId : null;
+                }
+                if (s.jugadores.length === 0) { delete SALAS[salaId]; return; }
+                io.to(salaId).emit('actualizar_sala', s.getLobbyData());
+            }, 20000);
         } else if (sala.G) {
+            // En partida: lo marcamos eliminado
             sala.G.players[idx].eliminated = true;
             sala.G.log.push(`💀 ${sala.G.players[idx].name} se desconectó.`);
             if (sala.G.currentPlayerIdx === idx) {
-                // Pasar turno
                 if (sala.aiTimeout) clearTimeout(sala.aiTimeout);
                 nextTurn(sala.G, sala);
             } else {
