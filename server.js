@@ -159,7 +159,7 @@ function isHuman(G, idx) { return G.players[idx] && !G.players[idx].eliminated &
 function isAI(G, idx) { return G.players[idx] && !G.players[idx].eliminated && G.players[idx].type === 'ai'; }
 
 // =====================================================================
-//  ESTADO DE PARTIDA (G) POR SALA
+//  ESTADO DE PARTIDA
 // =====================================================================
 function crearEstadoVacio() {
     return {
@@ -328,7 +328,8 @@ function processReinforceMove(G, sala, from, to) {
     if (getArmies(G, from) < 2) return;
     G.countries[from].armies -= 1;
     G.countries[to].armies += 1;
-    G.reinforceFrom = from; G.reinforceTo = to;
+    G.reinforceFrom = from;
+    G.reinforceTo = to;
     broadcastSala(sala);
 }
 
@@ -490,7 +491,12 @@ function aiPlace(G, sala, idx) {
     if (G.phase !== 'place') return;
     const info = G.placeInfo; if (!info) return;
     const own = playerCountries(G, idx);
-    if (own.length === 0) { G.phase = 'play'; broadcastSala(sala); scheduleAI(sala, idx); return; }
+    if (own.length === 0) {
+        G.phase = 'play';
+        broadcastSala(sala);
+        scheduleAI(sala, idx);
+        return;
+    }
     for (const contId of Object.keys(info.bonus)) {
         while (info.bonus[contId] > 0) {
             const cs = own.filter(cid => countryById(cid).cont === contId);
@@ -580,6 +586,13 @@ function scheduleAI(sala, idx) {
 function aiTurn(sala, idx) {
     const G = sala.G;
     if (G.gameOver || !isAI(G, idx) || G.currentPlayerIdx !== idx) return;
+
+    // ✅ FIX: Si estamos en fase de colocación, colocar primero (antes esto se saltaba y la IA nunca ponía tropas)
+    if (G.phase === 'place') {
+        aiPlace(G, sala, idx);   // aiPlace llamará a scheduleAI al final para continuar con los ataques
+        return;
+    }
+
     let attacks = 0; const maxAttacks = 30; let guard = 0;
     while (attacks < maxAttacks && !G.gameOver && !G.players[idx].eliminated && guard++ < 200) {
         const best = aiBestAttack(G, idx);
@@ -627,7 +640,6 @@ class Sala {
 
     addPlayer(socketId, nombre, clientId) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
-
         const existente = this.jugadores.find(j => j.clientId === clientId);
         if (existente) {
             existente.id = socketId;
@@ -635,17 +647,13 @@ class Sala {
             return { ok: true };
         }
         if (this.jugadores.length >= 6) return { ok: false, error: 'Sala llena (máx 6).' };
-
         const i = this.jugadores.length;
         this.jugadores.push({
-            id: socketId,
-            clientId,
+            id: socketId, clientId,
             nombre: nombre || `Jugador ${i + 1}`,
             color: COLORS[i % COLORS.length],
             colorName: COLOR_NAMES[i % COLOR_NAMES.length],
-            tipo: 'human',
-            eliminado: false,
-            idx: i
+            tipo: 'human', eliminado: false, idx: i
         });
         if (!this.hostClientId) this.hostClientId = clientId;
         return { ok: true };
@@ -661,9 +669,7 @@ class Sala {
             nombre: `IA ${i + 1}`,
             color: COLORS[i % COLORS.length],
             colorName: COLOR_NAMES[i % COLOR_NAMES.length],
-            tipo: 'ai',
-            eliminado: false,
-            idx: i
+            tipo: 'ai', eliminado: false, idx: i
         });
         return { ok: true };
     }
@@ -709,20 +715,14 @@ io.on('connection', (socket) => {
         salaId = (salaId || '').toUpperCase();
         if (!salaId) { socket.emit('error_juego', 'Sala inválida.'); return; }
         if (!clientId) clientId = 'c_' + socket.id;
-
         if (!SALAS[salaId]) SALAS[salaId] = new Sala(salaId);
         const sala = SALAS[salaId];
-
         const res = sala.addPlayer(socket.id, nombreJugador, clientId);
         if (!res.ok) { socket.emit('error_juego', res.error); return; }
-
         socket.join(salaId);
         socket.data.salaId = salaId;
         socket.data.clientId = clientId;
-
         io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
-
-        // Si la partida ya empezó (reconexión), avisar con partida_iniciada individual
         if (sala.estado === 'jugando' && sala.G) {
             const idx = sala.getPlayerIdxByClient(clientId);
             socket.emit('partida_iniciada', { estado: sala.G, miIndice: idx });
@@ -745,11 +745,7 @@ io.on('connection', (socket) => {
             return;
         }
         const res = sala.startGame();
-        if (!res.ok) {
-            socket.emit('error_juego', res.error || 'No se pudo iniciar.');
-            return;
-        }
-        // Emitir "partida_iniciada" individualmente a cada humano, con su propio índice
+        if (!res.ok) { socket.emit('error_juego', res.error || 'No se pudo iniciar.'); return; }
         sala.jugadores.forEach(j => {
             if (j.tipo === 'human' && j.id && !j.id.startsWith('bot_')) {
                 io.to(j.id).emit('partida_iniciada', { estado: sala.G, miIndice: j.idx });
@@ -765,7 +761,6 @@ io.on('connection', (socket) => {
         if (idx < 0 || idx !== G.currentPlayerIdx) return;
         if (G.gameOver) return;
         if (G.players[idx].type !== 'human') return;
-
         switch (accion.tipo) {
             case 'colocar': handlePlaceClick(G, sala, accion.pais); break;
             case 'iniciar_reagrupe': startReinforce(G, sala); break;
@@ -786,7 +781,6 @@ io.on('connection', (socket) => {
         const clientId = socket.data.clientId;
         const idx = sala.getPlayerIdxByClient(clientId);
         if (idx < 0) return;
-
         if (sala.estado === 'esperando') {
             sala.jugadores[idx]._desconectado = Date.now();
             io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
@@ -797,9 +791,7 @@ io.on('connection', (socket) => {
                 if (!j || !j._desconectado) return;
                 s.jugadores = s.jugadores.filter(x => x.clientId !== clientId);
                 s.jugadores.forEach((p, i) => { p.idx = i; });
-                if (s.hostClientId === clientId) {
-                    s.hostClientId = s.jugadores[0] ? s.jugadores[0].clientId : null;
-                }
+                if (s.hostClientId === clientId) s.hostClientId = s.jugadores[0] ? s.jugadores[0].clientId : null;
                 if (s.jugadores.length === 0) { delete SALAS[salaId]; return; }
                 io.to(salaId).emit('actualizar_sala', s.getLobbyData());
             }, 20000);
