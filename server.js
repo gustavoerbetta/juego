@@ -120,7 +120,7 @@ ADJACENCIES.forEach(([a, b]) => {
     if (!adjMap[b].includes(a)) adjMap[b].push(a);
 });
 
-// ============ COLORES (orden de ciclo: azul → verde → naranja → magenta → negro → blanco → violeta → rojo → cian) ============
+// ============ COLORES (orden: azul → verde → naranja → magenta → negro → blanco → violeta → rojo → cian) ============
 const COLORS = ['#2980b9', '#27ae60', '#e67e22', '#e91e63', '#222222', '#ffffff', '#9c27b0', '#c0392b', '#00bcd4'];
 const COLOR_NAMES = ['Azul', 'Verde', 'Naranja', 'Magenta', 'Negro', 'Blanco', 'Violeta', 'Rojo', 'Cian'];
 
@@ -705,18 +705,35 @@ class Sala {
         return { ok: true };
     }
 
-    setPlayerColor(clientId, colorIdx) {
+    // ======= CAMBIO DE COLOR (con permisos) =======
+    // reglas:
+    //  - Cualquier jugador puede cambiar SU PROPIO color.
+    //  - El anfitrión puede cambiar el color de CUALQUIER IA.
+    //  - Nadie puede cambiar el color de otro humano (ni el anfitrión).
+    setPlayerColor(requesterClientId, targetClientId, colorIdx) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
-        const j = this.jugadores.find(x => x.clientId === clientId);
-        if (!j) return { ok: false, error: 'Jugador no encontrado.' };
+        const requester = this.jugadores.find(x => x.clientId === requesterClientId);
+        if (!requester) return { ok: false, error: 'Solicitante no encontrado.' };
+        const target = this.jugadores.find(x => x.clientId === targetClientId);
+        if (!target) return { ok: false, error: 'Jugador objetivo no encontrado.' };
+
+        const esMismo = requesterClientId === targetClientId;
+        const esHost = this.hostClientId === requesterClientId;
+
+        if (!esMismo) {
+            if (!esHost) return { ok: false, error: 'Solo el anfitrión puede cambiar el color de otro jugador.' };
+            if (target.tipo !== 'ai') return { ok: false, error: 'Solo podés cambiar el color de las IA.' };
+        }
+
         if (typeof colorIdx !== 'number' || colorIdx < 0 || colorIdx >= COLORS.length) {
             return { ok: false, error: 'Color inválido.' };
         }
-        const tomado = this.jugadores.some(x => x.clientId !== clientId && x.colorIdx === colorIdx);
+        const tomado = this.jugadores.some(x => x.clientId !== targetClientId && x.colorIdx === colorIdx);
         if (tomado) return { ok: false, error: 'Color ya ocupado por otro jugador.' };
-        j.colorIdx = colorIdx;
-        j.color = COLORS[colorIdx];
-        j.colorName = COLOR_NAMES[colorIdx];
+
+        target.colorIdx = colorIdx;
+        target.color = COLORS[colorIdx];
+        target.colorName = COLOR_NAMES[colorIdx];
         return { ok: true };
     }
 
@@ -784,10 +801,12 @@ io.on('connection', (socket) => {
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
 
-    socket.on('cambiar_color', ({ salaId, colorIdx }) => {
+    // Cambiar color. Si targetClientId no viene, es el propio.
+    socket.on('cambiar_color', ({ salaId, colorIdx, targetClientId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
-        const res = sala.setPlayerColor(socket.data.clientId, colorIdx);
+        const target = targetClientId || socket.data.clientId;
+        const res = sala.setPlayerColor(socket.data.clientId, target, colorIdx);
         if (!res.ok) {
             socket.emit('error_color', res.error || 'Color no disponible.');
             return;
