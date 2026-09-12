@@ -267,8 +267,8 @@ function checkVictory(G, sala) {
 function endGame(G, sala, winnerIdx) {
     G.gameOver = true; G.phase = 'gameover'; G.winner = winnerIdx;
     const p = winnerIdx >= 0 ? G.players[winnerIdx] : null;
-    if (p) G.log.push(`🏆 ¡${p.name} ha ganado!`);
-    else G.log.push('🏆 Partida terminada.');
+    if (p) G.log.push(`¡${p.name} ha ganado!`);
+    else G.log.push('Partida terminada.');
     broadcastSala(sala);
 }
 
@@ -389,7 +389,7 @@ function resolveCombat(G, sala, fromId, toId, aLoss, dLoss) {
             G.countries[toId] = { owner: idx, armies: 1 };
             if (isHuman(G, idx)) {
                 if (G.countries[fromId].armies > 1) G.pendingTransfer = { from: fromId, to: toId };
-                G.log.push(`✅ ${p.name} conquistó ${countryById(toId).name}.`);
+                G.log.push(`${p.name} conquistó ${countryById(toId).name}.`);
                 G.combatDone = true; G.phase = 'play';
                 broadcastSala(sala); checkElimination(G, sala); return;
             } else {
@@ -399,13 +399,13 @@ function resolveCombat(G, sala, fromId, toId, aLoss, dLoss) {
                 if (toEnemies.length > 0) moveCount = Math.min(3, availableToMove);
                 else moveCount = Math.min(1, availableToMove);
                 if (moveCount > 0) { G.countries[fromId].armies -= moveCount; G.countries[toId].armies += moveCount; }
-                G.log.push(`🤖 ${p.name} conquistó ${countryById(toId).name}.`);
+                G.log.push(`${p.name} conquistó ${countryById(toId).name}.`);
                 G.combatDone = true; G.phase = 'play';
                 broadcastSala(sala); checkElimination(G, sala); return;
             }
         } else {
             G.countries[toId].armies = 1;
-            G.log.push(`❌ No se pudo ocupar ${countryById(toId).name} (solo 1 ficha).`);
+            G.log.push(`No se pudo ocupar ${countryById(toId).name} (solo 1 ficha).`);
             G.combatDone = true; broadcastSala(sala); return;
         }
     }
@@ -440,7 +440,7 @@ function checkElimination(G, sala) {
         if (i === idx || G.players[i].eliminated) continue;
         if (playerCountries(G, i).length === 0) {
             G.players[i].eliminated = true;
-            G.log.push(`💀 ${G.players[i].name} eliminado.`);
+            G.log.push(`${G.players[i].name} eliminado.`);
             if (checkVictory(G, sala)) return;
         }
     }
@@ -506,7 +506,7 @@ function aiPlace(G, sala, idx) {
         info.normal--; info.placed++; G.countries[best].armies++;
     }
     info.placed = info.total; G.phase = 'play';
-    G.log.push(`🤖 ${G.players[idx].name} desplegó sus tropas.`);
+    G.log.push(`${G.players[idx].name} desplegó sus tropas.`);
     broadcastSala(sala);
     scheduleAI(sala, idx);
 }
@@ -593,8 +593,8 @@ function aiTurn(sala, idx) {
     }
     if (G.gameOver) { broadcastSala(sala); return; }
     const moved = aiReinforce(G, idx);
-    if (moved > 0) G.log.push(`🤖 ${G.players[idx].name} movió ${moved} tropas.`);
-    else G.log.push(`🤖 ${G.players[idx].name} finalizó su turno.`);
+    if (moved > 0) G.log.push(`${G.players[idx].name} movió ${moved} tropas.`);
+    else G.log.push(`${G.players[idx].name} finalizó su turno.`);
     broadcastSala(sala);
     if (!G.gameOver && !G.players[idx].eliminated) endTurn(G, sala);
     else if (!G.gameOver) nextTurn(G, sala);
@@ -608,7 +608,7 @@ class Sala {
         this.id = id;
         this.jugadores = [];
         this.estado = 'esperando';
-        this.hostClientId = null; // identificador PERSISTENTE del anfitrión
+        this.hostClientId = null;
         this.G = null;
         this.aiTimeout = null;
     }
@@ -658,7 +658,7 @@ class Sala {
         this.jugadores.push({
             id: `bot_${Math.random().toString(36).slice(2, 11)}`,
             clientId: `bot_${Math.random().toString(36).slice(2, 11)}`,
-            nombre: `🤖 IA ${i + 1}`,
+            nombre: `IA ${i + 1}`,
             color: COLORS[i % COLORS.length],
             colorName: COLOR_NAMES[i % COLOR_NAMES.length],
             tipo: 'ai',
@@ -693,10 +693,7 @@ const SALAS = {};
 
 function broadcastSala(sala) {
     if (sala.estado === 'esperando') {
-        const data = sala.getLobbyData();
-        console.log(`[lobby ${sala.id}] hostClientId=${data.hostClientId} | jugadores:`,
-            sala.jugadores.map(j => `${j.nombre}(${j.clientId})`).join(', '));
-        io.to(sala.id).emit('actualizar_sala', data);
+        io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     } else if (sala.G) {
         io.to(sala.id).emit('estado_actualizado', { estado: sala.G });
     }
@@ -723,9 +720,9 @@ io.on('connection', (socket) => {
         socket.data.salaId = salaId;
         socket.data.clientId = clientId;
 
-        console.log(`[join] socket=${socket.id} clientId=${clientId} sala=${salaId} host=${sala.hostClientId}`);
         io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
 
+        // Si la partida ya empezó (reconexión), avisar con partida_iniciada individual
         if (sala.estado === 'jugando' && sala.G) {
             const idx = sala.getPlayerIdxByClient(clientId);
             socket.emit('partida_iniciada', { estado: sala.G, miIndice: idx });
@@ -735,10 +732,7 @@ io.on('connection', (socket) => {
     socket.on('agregar_bot', ({ salaId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
-        if (sala.hostClientId !== socket.data.clientId) {
-            console.log(`[bot] rechazado: ${socket.data.clientId} != host ${sala.hostClientId}`);
-            return;
-        }
+        if (sala.hostClientId !== socket.data.clientId) return;
         sala.addBot();
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
@@ -751,7 +745,16 @@ io.on('connection', (socket) => {
             return;
         }
         const res = sala.startGame();
-        if (!res.ok) socket.emit('error_juego', res.error || 'No se pudo iniciar.');
+        if (!res.ok) {
+            socket.emit('error_juego', res.error || 'No se pudo iniciar.');
+            return;
+        }
+        // Emitir "partida_iniciada" individualmente a cada humano, con su propio índice
+        sala.jugadores.forEach(j => {
+            if (j.tipo === 'human' && j.id && !j.id.startsWith('bot_')) {
+                io.to(j.id).emit('partida_iniciada', { estado: sala.G, miIndice: j.idx });
+            }
+        });
     });
 
     socket.on('accion', ({ salaId, accion }) => {
@@ -802,7 +805,7 @@ io.on('connection', (socket) => {
             }, 20000);
         } else if (sala.G) {
             sala.G.players[idx].eliminated = true;
-            sala.G.log.push(`💀 ${sala.G.players[idx].name} se desconectó.`);
+            sala.G.log.push(`${sala.G.players[idx].name} se desconectó.`);
             if (sala.G.currentPlayerIdx === idx) {
                 if (sala.aiTimeout) clearTimeout(sala.aiTimeout);
                 nextTurn(sala.G, sala);
