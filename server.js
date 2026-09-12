@@ -163,41 +163,18 @@ function isAI(G, idx) { return G.players[idx] && !G.players[idx].eliminated && G
 // =====================================================================
 function crearEstadoVacio() {
     return {
-        players: [],
-        currentPlayerIdx: 0,
-        phase: 'setup',
-        countries: {},
-        turnNumber: 1,
-        attackFrom: null,
-        attackTo: null,
-        diceResults: null,
-        lastCombat: null,
-        combatDone: false,
-        gameOver: false,
-        winner: null,
-        reinforceFrom: null,
-        reinforceTo: null,
-        placeInfo: null,
-        pendingTransfer: null,
-        log: []
+        players: [], currentPlayerIdx: 0, phase: 'setup', countries: {}, turnNumber: 1,
+        attackFrom: null, attackTo: null, diceResults: null, lastCombat: null,
+        combatDone: false, gameOver: false, winner: null, reinforceFrom: null,
+        reinforceTo: null, placeInfo: null, pendingTransfer: null, log: []
     };
 }
 
 function inicializarPartida(G) {
-    G.phase = 'play';
-    G.turnNumber = 1;
-    G.gameOver = false;
-    G.winner = null;
-    G.attackFrom = null;
-    G.attackTo = null;
-    G.diceResults = null;
-    G.lastCombat = null;
-    G.combatDone = false;
-    G.reinforceFrom = null;
-    G.reinforceTo = null;
-    G.placeInfo = null;
-    G.pendingTransfer = null;
-    G.countries = {};
+    G.phase = 'play'; G.turnNumber = 1; G.gameOver = false; G.winner = null;
+    G.attackFrom = null; G.attackTo = null; G.diceResults = null; G.lastCombat = null;
+    G.combatDone = false; G.reinforceFrom = null; G.reinforceTo = null;
+    G.placeInfo = null; G.pendingTransfer = null; G.countries = {};
 
     const shuffled = shuffle([...COUNTRIES.map(c => c.id)]);
     const numPlayers = G.players.length;
@@ -206,9 +183,7 @@ function inicializarPartida(G) {
     let idx = 0;
     for (let i = 0; i < numPlayers; i++) {
         const count = perPlayer + (i < remainder ? 1 : 0);
-        for (let j = 0; j < count; j++) {
-            G.countries[shuffled[idx++]] = { owner: i, armies: 1 };
-        }
+        for (let j = 0; j < count; j++) G.countries[shuffled[idx++]] = { owner: i, armies: 1 };
     }
     for (let i = 0; i < numPlayers; i++) {
         const cs = playerCountries(G, i);
@@ -218,7 +193,6 @@ function inicializarPartida(G) {
         const cs = playerCountries(G, i);
         for (let a = 0; a < 3; a++) G.countries[cs[Math.floor(Math.random() * cs.length)]].armies += 1;
     }
-
     const rolls = G.players.map(() => Math.floor(Math.random() * 6) + 1);
     let maxRoll = -1, firstIdx = 0;
     for (let i = 0; i < rolls.length; i++) if (rolls[i] > maxRoll) { maxRoll = rolls[i]; firstIdx = i; }
@@ -231,15 +205,9 @@ function inicializarPartida(G) {
 // =====================================================================
 function startTurn(G, sala) {
     if (G.gameOver) return;
-    G.phase = 'play';
-    G.combatDone = false;
-    G.attackFrom = null;
-    G.attackTo = null;
-    G.pendingTransfer = null;
-    G.reinforceFrom = null;
-    G.reinforceTo = null;
-    G.diceResults = null;
-    G.lastCombat = null;
+    G.phase = 'play'; G.combatDone = false; G.attackFrom = null; G.attackTo = null;
+    G.pendingTransfer = null; G.reinforceFrom = null; G.reinforceTo = null;
+    G.diceResults = null; G.lastCombat = null;
 
     const idx = G.currentPlayerIdx;
     const p = G.players[idx];
@@ -271,7 +239,6 @@ function startTurn(G, sala) {
         if (isAI(G, idx)) scheduleAI(sala, idx);
         return;
     }
-
     G.phase = 'place';
     broadcastSala(sala);
     if (isAI(G, idx)) scheduleAI(sala, idx);
@@ -298,9 +265,7 @@ function checkVictory(G, sala) {
 }
 
 function endGame(G, sala, winnerIdx) {
-    G.gameOver = true;
-    G.phase = 'gameover';
-    G.winner = winnerIdx;
+    G.gameOver = true; G.phase = 'gameover'; G.winner = winnerIdx;
     const p = winnerIdx >= 0 ? G.players[winnerIdx] : null;
     if (p) G.log.push(`🏆 ¡${p.name} ha ganado!`);
     else G.log.push('🏆 Partida terminada.');
@@ -323,29 +288,18 @@ function handlePlaceClick(G, sala, id) {
     const idx = G.currentPlayerIdx;
     const info = G.placeInfo;
     if (!info || info.placed >= info.total) {
-        G.phase = 'play';
-        broadcastSala(sala);
+        G.phase = 'play'; broadcastSala(sala);
         if (isAI(G, idx)) scheduleAI(sala, idx);
         return;
     }
     if (getOwner(G, id) !== idx) return;
-
     const contId = countryById(id).cont;
-    if ((info.bonus[contId] || 0) > 0) {
-        info.bonus[contId]--;
-        info.placed++;
-        G.countries[id].armies++;
-    } else if (info.normal > 0) {
-        info.normal--;
-        info.placed++;
-        G.countries[id].armies++;
-    } else {
-        return;
-    }
+    if ((info.bonus[contId] || 0) > 0) { info.bonus[contId]--; info.placed++; G.countries[id].armies++; }
+    else if (info.normal > 0) { info.normal--; info.placed++; G.countries[id].armies++; }
+    else return;
     broadcastSala(sala);
     if (info.placed >= info.total) {
-        G.phase = 'play';
-        broadcastSala(sala);
+        G.phase = 'play'; broadcastSala(sala);
         if (isAI(G, idx)) scheduleAI(sala, idx);
     }
 }
@@ -362,9 +316,7 @@ function startReinforce(G, sala) {
         if (getFriendlyAdjacent(G, cid, idx).length > 0) { possible = true; break; }
     }
     if (!possible) return;
-    G.phase = 'reinforce';
-    G.reinforceFrom = null;
-    G.reinforceTo = null;
+    G.phase = 'reinforce'; G.reinforceFrom = null; G.reinforceTo = null;
     broadcastSala(sala);
 }
 
@@ -376,8 +328,7 @@ function processReinforceMove(G, sala, from, to) {
     if (getArmies(G, from) < 2) return;
     G.countries[from].armies -= 1;
     G.countries[to].armies += 1;
-    G.reinforceFrom = from;
-    G.reinforceTo = to;
+    G.reinforceFrom = from; G.reinforceTo = to;
     broadcastSala(sala);
 }
 
@@ -390,13 +341,8 @@ function initiateAttack(G, sala, fromId, toId) {
     if (getArmies(G, fromId) < 2) return false;
     if (getOwner(G, toId) === idx) return false;
     if (!getAdjacentCountries(fromId).includes(toId)) return false;
-
-    G.attackFrom = fromId;
-    G.attackTo = toId;
-    G.phase = 'combat';
-    G.diceResults = null;
-    G.lastCombat = null;
-    G.combatDone = false;
+    G.attackFrom = fromId; G.attackTo = toId; G.phase = 'combat';
+    G.diceResults = null; G.lastCombat = null; G.combatDone = false;
     G.pendingTransfer = null;
     broadcastSala(sala);
     return true;
@@ -406,7 +352,6 @@ function rollDice(G, sala) {
     if (G.phase !== 'combat' || G.combatDone) return;
     const fromId = G.attackFrom, toId = G.attackTo;
     if (!fromId || !toId) return;
-
     const attackerArmies = getArmies(G, fromId);
     const defenderArmies = getArmies(G, toId);
     if (attackerArmies < 2 || defenderArmies < 1) { cancelCombat(G, sala); return; }
@@ -416,16 +361,13 @@ function rollDice(G, sala) {
     else if (attackerArmies >= 3) attackDice = 2;
     let defendDice = Math.min(3, defenderArmies);
 
-    const aDice = [];
-    for (let i = 0; i < attackDice; i++) aDice.push(Math.floor(Math.random() * 6) + 1);
-    const dDice = [];
-    for (let i = 0; i < defendDice; i++) dDice.push(Math.floor(Math.random() * 6) + 1);
+    const aDice = []; for (let i = 0; i < attackDice; i++) aDice.push(Math.floor(Math.random() * 6) + 1);
+    const dDice = []; for (let i = 0; i < defendDice; i++) dDice.push(Math.floor(Math.random() * 6) + 1);
     aDice.sort((a, b) => b - a);
     dDice.sort((a, b) => b - a);
 
     const pairs = Math.min(aDice.length, dDice.length);
-    let aLoss = 0, dLoss = 0;
-    const results = [];
+    let aLoss = 0, dLoss = 0; const results = [];
     for (let i = 0; i < pairs; i++) {
         if (aDice[i] > dDice[i]) { dLoss++; results.push({ a: aDice[i], d: dDice[i], winner: 'attacker' }); }
         else { aLoss++; results.push({ a: aDice[i], d: dDice[i], winner: 'defender' }); }
@@ -445,60 +387,38 @@ function resolveCombat(G, sala, fromId, toId, aLoss, dLoss) {
         if (fromArmies > 1) {
             G.countries[fromId].armies -= 1;
             G.countries[toId] = { owner: idx, armies: 1 };
-
             if (isHuman(G, idx)) {
-                if (G.countries[fromId].armies > 1) {
-                    G.pendingTransfer = { from: fromId, to: toId };
-                }
+                if (G.countries[fromId].armies > 1) G.pendingTransfer = { from: fromId, to: toId };
                 G.log.push(`✅ ${p.name} conquistó ${countryById(toId).name}.`);
-                G.combatDone = true;
-                G.phase = 'play';
-                broadcastSala(sala);
-                checkElimination(G, sala);
-                return;
+                G.combatDone = true; G.phase = 'play';
+                broadcastSala(sala); checkElimination(G, sala); return;
             } else {
                 let availableToMove = G.countries[fromId].armies - 1;
                 let moveCount = 0;
                 const toEnemies = getEnemyAdjacent(G, toId, idx);
                 if (toEnemies.length > 0) moveCount = Math.min(3, availableToMove);
                 else moveCount = Math.min(1, availableToMove);
-                if (moveCount > 0) {
-                    G.countries[fromId].armies -= moveCount;
-                    G.countries[toId].armies += moveCount;
-                }
+                if (moveCount > 0) { G.countries[fromId].armies -= moveCount; G.countries[toId].armies += moveCount; }
                 G.log.push(`🤖 ${p.name} conquistó ${countryById(toId).name}.`);
-                G.combatDone = true;
-                G.phase = 'play';
-                broadcastSala(sala);
-                checkElimination(G, sala);
-                return;
+                G.combatDone = true; G.phase = 'play';
+                broadcastSala(sala); checkElimination(G, sala); return;
             }
         } else {
             G.countries[toId].armies = 1;
             G.log.push(`❌ No se pudo ocupar ${countryById(toId).name} (solo 1 ficha).`);
-            G.combatDone = true;
-            broadcastSala(sala);
-            return;
+            G.combatDone = true; broadcastSala(sala); return;
         }
     }
-
     if (G.countries[fromId].armies < 1) G.countries[fromId].armies = 1;
     if (G.countries[toId].armies < 1) G.countries[toId].armies = 1;
-
-    if (G.countries[fromId].armies < 2) {
-        G.combatDone = true;
-    } else {
-        G.combatDone = false;
-    }
+    if (G.countries[fromId].armies < 2) G.combatDone = true;
+    else G.combatDone = false;
     broadcastSala(sala);
 }
 
 function cancelCombat(G, sala) {
-    G.phase = 'play';
-    G.attackFrom = null;
-    G.attackTo = null;
-    G.lastCombat = null;
-    G.diceResults = null;
+    G.phase = 'play'; G.attackFrom = null; G.attackTo = null;
+    G.lastCombat = null; G.diceResults = null;
     broadcastSala(sala);
     if (isAI(G, G.currentPlayerIdx)) scheduleAI(sala, G.currentPlayerIdx);
 }
@@ -510,9 +430,7 @@ function transferir(G, sala) {
     if (getArmies(G, to) >= 3) { G.pendingTransfer = null; broadcastSala(sala); return; }
     G.countries[from].armies--;
     G.countries[to].armies++;
-    if (getArmies(G, from) < 2 || getArmies(G, to) >= 3) {
-        G.pendingTransfer = null;
-    }
+    if (getArmies(G, from) < 2 || getArmies(G, to) >= 3) G.pendingTransfer = null;
     broadcastSala(sala);
 }
 
@@ -543,165 +461,115 @@ function evaluatePlacementScore(G, cid, idx, contId) {
     const myArmies = getArmies(G, cid);
     if (enemies.length === 0) return -10000;
     for (const enemyId of enemies) {
-        const enemyOwner = getOwner(G, enemyId);
-        const enemyArmies = getArmies(G, enemyId);
-        const enemyCont = countryById(enemyId).cont;
-        const targetIsHuman = isHuman(G, enemyOwner);
-        if (targetIsHuman) {
+        const eo = getOwner(G, enemyId), ea = getArmies(G, enemyId), ec = countryById(enemyId).cont;
+        const th = isHuman(G, eo);
+        if (th) {
             score += 4000;
-            if (continentOwned(G, enemyOwner, enemyCont)) {
-                score += 8000 + (CONTINENTS[enemyCont].bonus * 1200);
-                if (myArmies < enemyArmies + 2) score += 3500;
+            if (continentOwned(G, eo, ec)) {
+                score += 8000 + (CONTINENTS[ec].bonus * 1200);
+                if (myArmies < ea + 2) score += 3500;
             } else {
-                const pr = continentProgress(G, enemyOwner, enemyCont);
-                if (pr.missing === 1) score += 6500 + (CONTINENTS[enemyCont].bonus * 900);
+                const pr = continentProgress(G, eo, ec);
+                if (pr.missing === 1) score += 6500 + (CONTINENTS[ec].bonus * 900);
                 else if (pr.missing === 2) score += 3500;
             }
-            if (enemyArmies <= 2) score += 2500;
-            if (enemyArmies >= 5 && myArmies < enemyArmies) score += 3000;
-        } else {
-            score += 200;
-            if (continentOwned(G, enemyOwner, enemyCont)) score += 1000;
-        }
+            if (ea <= 2) score += 2500;
+            if (ea >= 5 && myArmies < ea) score += 3000;
+        } else { score += 200; if (continentOwned(G, eo, ec)) score += 1000; }
     }
-    const aiContProg = continentProgress(G, idx, contId);
+    const ap = continentProgress(G, idx, contId);
     if (!continentOwned(G, idx, contId)) {
-        if (aiContProg.missing === 1) score += 7500 + (CONTINENTS[contId].bonus * 1200);
-        else if (aiContProg.missing === 2) score += 4500 + (CONTINENTS[contId].bonus * 700);
-    } else {
-        const externalEnemies = enemies.filter(e => countryById(e).cont !== contId);
-        if (externalEnemies.length > 0) score += 3000;
-    }
+        if (ap.missing === 1) score += 7500 + (CONTINENTS[contId].bonus * 1200);
+        else if (ap.missing === 2) score += 4500 + (CONTINENTS[contId].bonus * 700);
+    } else { if (enemies.some(e => countryById(e).cont !== contId)) score += 3000; }
     score += Math.min(myArmies, 15) * 50;
     return score;
 }
 
 function aiPlace(G, sala, idx) {
     if (G.phase !== 'place') return;
-    const info = G.placeInfo;
-    if (!info) return;
+    const info = G.placeInfo; if (!info) return;
     const own = playerCountries(G, idx);
     if (own.length === 0) { G.phase = 'play'; broadcastSala(sala); scheduleAI(sala, idx); return; }
-
     for (const contId of Object.keys(info.bonus)) {
         while (info.bonus[contId] > 0) {
-            const contCountries = own.filter(cid => countryById(cid).cont === contId);
-            if (contCountries.length === 0) { info.bonus[contId] = 0; break; }
-            let bestCountry = contCountries[0], maxScore = -99999;
-            for (const cid of contCountries) {
-                const score = evaluatePlacementScore(G, cid, idx, contId);
-                if (score > maxScore) { maxScore = score; bestCountry = cid; }
-            }
-            info.bonus[contId]--;
-            info.placed++;
-            G.countries[bestCountry].armies++;
+            const cs = own.filter(cid => countryById(cid).cont === contId);
+            if (cs.length === 0) { info.bonus[contId] = 0; break; }
+            let best = cs[0], max = -99999;
+            for (const cid of cs) { const s = evaluatePlacementScore(G, cid, idx, contId); if (s > max) { max = s; best = cid; } }
+            info.bonus[contId]--; info.placed++; G.countries[best].armies++;
         }
     }
     while (info.normal > 0) {
-        let bestCountry = own[0], maxScore = -99999;
-        for (const cid of own) {
-            const score = evaluatePlacementScore(G, cid, idx, countryById(cid).cont);
-            if (score > maxScore) { maxScore = score; bestCountry = cid; }
-        }
-        info.normal--;
-        info.placed++;
-        G.countries[bestCountry].armies++;
+        let best = own[0], max = -99999;
+        for (const cid of own) { const s = evaluatePlacementScore(G, cid, idx, countryById(cid).cont); if (s > max) { max = s; best = cid; } }
+        info.normal--; info.placed++; G.countries[best].armies++;
     }
-    info.placed = info.total;
-    G.phase = 'play';
+    info.placed = info.total; G.phase = 'play';
     G.log.push(`🤖 ${G.players[idx].name} desplegó sus tropas.`);
     broadcastSala(sala);
     scheduleAI(sala, idx);
 }
 
 function aiBestAttack(G, idx) {
-    const own = playerCountries(G, idx);
-    const candidates = [];
+    const own = playerCountries(G, idx); const cands = [];
     for (const fromId of own) {
-        const fromArmies = getArmies(G, fromId);
-        if (fromArmies < 2) continue;
+        const fa = getArmies(G, fromId); if (fa < 2) continue;
         for (const toId of getEnemyAdjacent(G, fromId, idx)) {
-            const toArmies = getArmies(G, toId);
-            const targetOwner = getOwner(G, toId);
-            const targetIsHuman = isHuman(G, targetOwner);
-            const targetCont = countryById(toId).cont;
-            const isHumanContinent = targetIsHuman && continentOwned(G, targetOwner, targetCont);
-            const humanProgress = targetIsHuman ? continentProgress(G, targetOwner, targetCont) : null;
-            const isHumanNearCont = humanProgress && humanProgress.missing <= 2;
-            const aiProgress = continentProgress(G, idx, targetCont);
-            const isAiNearCont = aiProgress.missing <= 2;
-            let minArmiesNeeded = toArmies + 1;
-            if (isHumanContinent || isAiNearCont || isHumanNearCont) {
-                if (toArmies === 1) minArmiesNeeded = 2;
-                else if (toArmies === 2) minArmiesNeeded = 3;
-                else if (toArmies === 3) minArmiesNeeded = 4;
-                else minArmiesNeeded = toArmies + 1;
-            } else {
-                if (toArmies === 1) minArmiesNeeded = 3;
-                else if (toArmies === 2) minArmiesNeeded = 4;
-                else if (toArmies === 3) minArmiesNeeded = 5;
-                else minArmiesNeeded = Math.ceil(toArmies * 1.25) + 1;
-            }
-            if (fromArmies < minArmiesNeeded) continue;
-            let score = 0;
-            const armyMargin = fromArmies - toArmies;
-            if (targetIsHuman) {
-                score += 5000;
-                if (isHumanContinent) score += 12000 + (CONTINENTS[targetCont].bonus * 2000);
-                if (isHumanNearCont) score += 7000 + (CONTINENTS[targetCont].bonus * 1000);
-                const humanTerritories = playerCountries(G, targetOwner).length;
-                if (humanTerritories <= 3) score += 15000;
-                else if (humanTerritories <= 6) score += 4000;
-            } else {
-                const activeHumans = getActiveHumanIndices(G);
-                score += activeHumans.length > 0 ? 100 : 2000;
-            }
-            if (continentOwned(G, idx, targetCont)) score += 4000;
-            else {
-                if (aiProgress.missing === 1) score += 10000 + (CONTINENTS[targetCont].bonus * 1500);
-                else if (aiProgress.missing === 2) score += 5000 + (CONTINENTS[targetCont].bonus * 800);
-            }
-            if (toArmies === 1 && fromArmies >= 3) score += 3500;
-            score += armyMargin * 150;
-            score += (fromArmies / Math.max(1, toArmies)) * 200;
-            candidates.push({ from: fromId, to: toId, score, margin: armyMargin });
+            const ta = getArmies(G, toId), to = getOwner(G, toId);
+            const th = isHuman(G, to), tc = countryById(toId).cont;
+            const hCont = th && continentOwned(G, to, tc);
+            const hPr = th ? continentProgress(G, to, tc) : null;
+            const hNear = hPr && hPr.missing <= 2;
+            const aPr = continentProgress(G, idx, tc);
+            const aNear = aPr.missing <= 2;
+            let min = ta + 1;
+            if (hCont || aNear || hNear) min = ta + 1;
+            else { if (ta === 1) min = 3; else if (ta === 2) min = 4; else if (ta === 3) min = 5; else min = Math.ceil(ta * 1.25) + 1; }
+            if (fa < min) continue;
+            let sc = 0;
+            if (th) {
+                sc += 5000;
+                if (hCont) sc += 12000 + (CONTINENTS[tc].bonus * 2000);
+                if (hNear) sc += 7000 + (CONTINENTS[tc].bonus * 1000);
+                const ht = playerCountries(G, to).length;
+                if (ht <= 3) sc += 15000; else if (ht <= 6) sc += 4000;
+            } else { sc += 200; }
+            if (continentOwned(G, idx, tc)) sc += 4000;
+            else { if (aPr.missing === 1) sc += 10000 + (CONTINENTS[tc].bonus * 1500); else if (aPr.missing === 2) sc += 5000 + (CONTINENTS[tc].bonus * 800); }
+            if (ta === 1 && fa >= 3) sc += 3500;
+            sc += (fa - ta) * 150;
+            sc += (fa / Math.max(1, ta)) * 200;
+            cands.push({ from: fromId, to: toId, score: sc });
         }
     }
-    if (candidates.length === 0) return null;
-    candidates.sort((a, b) => b.score - a.score);
-    return candidates[0];
+    if (!cands.length) return null;
+    cands.sort((a, b) => b.score - a.score);
+    return cands[0];
 }
 
 function aiReinforce(G, idx) {
-    let totalMoves = 0;
-    for (let iter = 0; iter < 15; iter++) {
-        let bestScore = -Infinity, bestFrom = null, bestTo = null, bestAmount = 0;
-        const ownCountries = playerCountries(G, idx);
-        for (const from of ownCountries) {
-            const fromArmies = getArmies(G, from);
-            if (fromArmies < 2) continue;
+    let total = 0;
+    for (let it = 0; it < 15; it++) {
+        let bs = -Infinity, bf = null, bt = null, ba = 0;
+        for (const from of playerCountries(G, idx)) {
+            const fam = getArmies(G, from);
+            if (fam < 2) continue;
             for (const to of getFriendlyAdjacent(G, from, idx)) {
-                const toEnemies = getEnemyAdjacent(G, to, idx);
-                const fromEnemies = getEnemyAdjacent(G, from, idx);
-                let score = 0;
-                const toHasHumanEnemies = toEnemies.some(eid => isHuman(G, getOwner(G, eid)));
-                const fromHasHumanEnemies = fromEnemies.some(eid => isHuman(G, getOwner(G, eid)));
-                if (fromEnemies.length === 0 && toEnemies.length > 0) score += 10000;
-                if (toHasHumanEnemies) score += 5000;
-                if (fromHasHumanEnemies && fromArmies <= 3) score -= 4000;
-                score += toEnemies.length * 300;
-                if (score > bestScore && score > 100) {
-                    bestScore = score; bestFrom = from; bestTo = to;
-                    bestAmount = (fromEnemies.length === 0) ? (fromArmies - 1) : Math.floor((fromArmies - 1) / 2);
-                }
+                const te = getEnemyAdjacent(G, to, idx), fe = getEnemyAdjacent(G, from, idx);
+                let sc = 0;
+                if (fe.length === 0 && te.length > 0) sc += 10000;
+                if (te.some(e => isHuman(G, getOwner(G, e)))) sc += 5000;
+                if (fe.some(e => isHuman(G, getOwner(G, e))) && fam <= 3) sc -= 4000;
+                sc += te.length * 300;
+                if (sc > bs && sc > 100) { bs = sc; bf = from; bt = to; ba = fe.length === 0 ? fam - 1 : Math.floor((fam - 1) / 2); }
             }
         }
-        if (bestFrom === null || bestAmount <= 0) break;
-        G.countries[bestFrom].armies -= bestAmount;
-        G.countries[bestTo].armies += bestAmount;
-        totalMoves += bestAmount;
+        if (!bf || ba <= 0) break;
+        G.countries[bf].armies -= ba; G.countries[bt].armies += ba;
+        total += ba;
     }
-    return totalMoves;
+    return total;
 }
 
 function scheduleAI(sala, idx) {
@@ -712,38 +580,24 @@ function scheduleAI(sala, idx) {
 function aiTurn(sala, idx) {
     const G = sala.G;
     if (G.gameOver || !isAI(G, idx) || G.currentPlayerIdx !== idx) return;
-
-    let attacks = 0;
-    const maxAttacks = 30;
-    let guard = 0;
+    let attacks = 0; const maxAttacks = 30; let guard = 0;
     while (attacks < maxAttacks && !G.gameOver && !G.players[idx].eliminated && guard++ < 200) {
         const best = aiBestAttack(G, idx);
         if (!best) break;
         if (!initiateAttack(G, sala, best.from, best.to)) break;
         let safety = 25;
-        while (G.phase === 'combat' && !G.combatDone && safety-- > 0) {
-            rollDice(G, sala);
-        }
-        G.phase = 'play';
-        G.attackFrom = null;
-        G.attackTo = null;
-        G.lastCombat = null;
+        while (G.phase === 'combat' && !G.combatDone && safety-- > 0) rollDice(G, sala);
+        G.phase = 'play'; G.attackFrom = null; G.attackTo = null; G.lastCombat = null;
         attacks++;
         if (G.gameOver) break;
     }
-
     if (G.gameOver) { broadcastSala(sala); return; }
-
     const moved = aiReinforce(G, idx);
     if (moved > 0) G.log.push(`🤖 ${G.players[idx].name} movió ${moved} tropas.`);
     else G.log.push(`🤖 ${G.players[idx].name} finalizó su turno.`);
     broadcastSala(sala);
-
-    if (!G.gameOver && !G.players[idx].eliminated) {
-        endTurn(G, sala);
-    } else if (!G.gameOver) {
-        nextTurn(G, sala);
-    }
+    if (!G.gameOver && !G.players[idx].eliminated) endTurn(G, sala);
+    else if (!G.gameOver) nextTurn(G, sala);
 }
 
 // =====================================================================
@@ -752,7 +606,7 @@ function aiTurn(sala, idx) {
 class Sala {
     constructor(id) {
         this.id = id;
-        this.jugadores = []; // { id(socketId actual), clientId, nombre, color, colorName, tipo, eliminado, idx }
+        this.jugadores = [];
         this.estado = 'esperando';
         this.hostClientId = null; // identificador PERSISTENTE del anfitrión
         this.G = null;
@@ -764,6 +618,7 @@ class Sala {
             id: this.id,
             estado: this.estado,
             hostClientId: this.hostClientId,
+            hostSocketId: this.jugadores.find(j => j.clientId === this.hostClientId)?.id || null,
             jugadores: this.jugadores.map(j => ({
                 id: j.id, nombre: j.nombre, color: j.color, tipo: j.tipo, esBot: j.tipo === 'ai'
             }))
@@ -773,14 +628,12 @@ class Sala {
     addPlayer(socketId, nombre, clientId) {
         if (this.estado !== 'esperando') return { ok: false, error: 'La partida ya comenzó.' };
 
-        // ¿Es una reconexión de un cliente que ya estaba?
         const existente = this.jugadores.find(j => j.clientId === clientId);
         if (existente) {
-            existente.id = socketId; // actualizamos su socketId al nuevo
+            existente.id = socketId;
             if (existente._desconectado) delete existente._desconectado;
             return { ok: true };
         }
-
         if (this.jugadores.length >= 6) return { ok: false, error: 'Sala llena (máx 6).' };
 
         const i = this.jugadores.length;
@@ -821,12 +674,8 @@ class Sala {
         this.estado = 'jugando';
         this.G = crearEstadoVacio();
         this.G.players = this.jugadores.map((j, i) => ({
-            name: j.nombre,
-            type: j.tipo,
-            color: j.color,
-            colorName: j.colorName,
-            eliminated: false,
-            id: i
+            name: j.nombre, type: j.tipo, color: j.color, colorName: j.colorName,
+            eliminated: false, id: i
         }));
         inicializarPartida(this.G);
         broadcastSala(this);
@@ -844,7 +693,10 @@ const SALAS = {};
 
 function broadcastSala(sala) {
     if (sala.estado === 'esperando') {
-        io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
+        const data = sala.getLobbyData();
+        console.log(`[lobby ${sala.id}] hostClientId=${data.hostClientId} | jugadores:`,
+            sala.jugadores.map(j => `${j.nombre}(${j.clientId})`).join(', '));
+        io.to(sala.id).emit('actualizar_sala', data);
     } else if (sala.G) {
         io.to(sala.id).emit('estado_actualizado', { estado: sala.G });
     }
@@ -859,7 +711,7 @@ io.on('connection', (socket) => {
     socket.on('crear_o_unirse', ({ salaId, nombreJugador, clientId }) => {
         salaId = (salaId || '').toUpperCase();
         if (!salaId) { socket.emit('error_juego', 'Sala inválida.'); return; }
-        if (!clientId) clientId = 'c_' + socket.id; // fallback
+        if (!clientId) clientId = 'c_' + socket.id;
 
         if (!SALAS[salaId]) SALAS[salaId] = new Sala(salaId);
         const sala = SALAS[salaId];
@@ -871,6 +723,7 @@ io.on('connection', (socket) => {
         socket.data.salaId = salaId;
         socket.data.clientId = clientId;
 
+        console.log(`[join] socket=${socket.id} clientId=${clientId} sala=${salaId} host=${sala.hostClientId}`);
         io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
 
         if (sala.estado === 'jugando' && sala.G) {
@@ -882,7 +735,10 @@ io.on('connection', (socket) => {
     socket.on('agregar_bot', ({ salaId }) => {
         const sala = SALAS[(salaId || '').toUpperCase()];
         if (!sala) return;
-        if (sala.hostClientId !== socket.data.clientId) return; // solo el anfitrión
+        if (sala.hostClientId !== socket.data.clientId) {
+            console.log(`[bot] rechazado: ${socket.data.clientId} != host ${sala.hostClientId}`);
+            return;
+        }
         sala.addBot();
         io.to(sala.id).emit('actualizar_sala', sala.getLobbyData());
     });
@@ -908,30 +764,14 @@ io.on('connection', (socket) => {
         if (G.players[idx].type !== 'human') return;
 
         switch (accion.tipo) {
-            case 'colocar':
-                handlePlaceClick(G, sala, accion.pais);
-                break;
-            case 'iniciar_reagrupe':
-                startReinforce(G, sala);
-                break;
-            case 'reagrupar':
-                processReinforceMove(G, sala, accion.desde, accion.hacia);
-                break;
-            case 'atacar':
-                initiateAttack(G, sala, accion.desde, accion.hacia);
-                break;
-            case 'tirar_dados':
-                rollDice(G, sala);
-                break;
-            case 'terminar_combate':
-                cancelCombat(G, sala);
-                break;
-            case 'transferir':
-                transferir(G, sala);
-                break;
-            case 'finalizar_turno':
-                endTurn(G, sala);
-                break;
+            case 'colocar': handlePlaceClick(G, sala, accion.pais); break;
+            case 'iniciar_reagrupe': startReinforce(G, sala); break;
+            case 'reagrupar': processReinforceMove(G, sala, accion.desde, accion.hacia); break;
+            case 'atacar': initiateAttack(G, sala, accion.desde, accion.hacia); break;
+            case 'tirar_dados': rollDice(G, sala); break;
+            case 'terminar_combate': cancelCombat(G, sala); break;
+            case 'transferir': transferir(G, sala); break;
+            case 'finalizar_turno': endTurn(G, sala); break;
         }
     });
 
@@ -940,22 +780,18 @@ io.on('connection', (socket) => {
         if (!salaId) return;
         const sala = SALAS[salaId];
         if (!sala) return;
-
         const clientId = socket.data.clientId;
         const idx = sala.getPlayerIdxByClient(clientId);
         if (idx < 0) return;
 
         if (sala.estado === 'esperando') {
-            // En lobby: esperamos 20s por si reconecta
             sala.jugadores[idx]._desconectado = Date.now();
             io.to(salaId).emit('actualizar_sala', sala.getLobbyData());
-
             setTimeout(() => {
                 const s = SALAS[salaId];
                 if (!s) return;
                 const j = s.jugadores.find(x => x.clientId === clientId);
                 if (!j || !j._desconectado) return;
-                // Eliminar
                 s.jugadores = s.jugadores.filter(x => x.clientId !== clientId);
                 s.jugadores.forEach((p, i) => { p.idx = i; });
                 if (s.hostClientId === clientId) {
@@ -965,7 +801,6 @@ io.on('connection', (socket) => {
                 io.to(salaId).emit('actualizar_sala', s.getLobbyData());
             }, 20000);
         } else if (sala.G) {
-            // En partida: lo marcamos eliminado
             sala.G.players[idx].eliminated = true;
             sala.G.log.push(`💀 ${sala.G.players[idx].name} se desconectó.`);
             if (sala.G.currentPlayerIdx === idx) {
